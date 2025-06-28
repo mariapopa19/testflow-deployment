@@ -1,0 +1,6 @@
+[submodule "testflow-backend"]
+	path = testflow-backend
+	url = https://github.com/mariapopa19/testflow-backend
+[submodule "testflow-frontend"]
+	path = testflow-frontend
+	url = https://github.com/mariapopa19/testflow-frontend
