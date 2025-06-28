@@ -1,0 +1,87 @@
+version: '3.8'
+
+services:
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: testflow-sqlserver
+    user: "0:0" 
+    environment:
+      - ACCEPT_EULA=Y
+      - SA_PASSWORD=${SQL_SA_PASSWORD}
+      - MSSQL_PID=Developer
+    ports:
+      - "1433:1433"
+    volumes:
+      - sqlserver_data:/var/opt/mssql
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P ${SQL_SA_PASSWORD} -Q 'SELECT 1' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    restart: unless-stopped
+
+  db-init:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    environment:
+      - SA_PASSWORD=${SQL_SA_PASSWORD}
+    volumes:
+      - ./init:/docker-entrypoint-initdb.d
+    command: >
+      bash -c '
+      /opt/mssql-tools18/bin/sqlcmd -S sqlserver -U sa -P ${SQL_SA_PASSWORD} -C -d master -i docker-entrypoint-initdb.d/init.sql;
+      echo "Database initialization completed;"
+      '
+    profiles:
+      - donotstart
+
+  backend:
+    build:
+      context: ./testflow-backend
+      dockerfile: TestFlow/Dockerfile
+    container_name: testflow-backend
+    ports:
+      - "7049:8080"
+      - "7050:8081"  # Add HTTPS port
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=https://+:8081;http://+:8080  # Put HTTP first
+      - ASPNETCORE_HTTPS_PORTS=8081
+      - ASPNETCORE_Kestrel__Certificates__Default__Password=YourPassword123
+      - ASPNETCORE_Kestrel__Certificates__Default__Path=/https/aspnetapp.pfx
+      - ConnectionStrings__DefaultConnection=${DB_CONNECTION_STRING}
+      - Authentication__Google__ClientId=${GOOGLE_CLIENT_ID}
+      - Authentication__Google__ClientSecret=${GOOGLE_CLIENT_SECRET}
+      - JwtSettings__Secret=${JWT_SECRET}
+      - OpenAI__ApiKey=${OPENAI_API_KEY}
+      - HuggingFace__ApiKey=${HUGGINGFACE_API_KEY}
+    volumes:
+      - dataprotection_keys:/root/.aspnet/DataProtection-Keys
+      - ${USERPROFILE}\.aspnet\https:/https:ro  # Mount certificate volume
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./testflow-frontend
+      dockerfile: Dockerfile
+      args:
+        - VITE_API_BASE_URL=https://localhost:7050  # Use HTTPS port
+        - VITE_GOOGLE_CLIENT_ID=${VITE_GOOGLE_CLIENT_ID}
+    container_name: testflow-frontend
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  sqlserver_data:
+    driver: local
+  dataprotection_keys:
+    driver: local
