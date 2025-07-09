@@ -83,6 +83,18 @@ Stop and remove all containers:
 docker compose down
 ```
 
+Force rebuild when submodule changes are pulled (PowerShell):
+
+```bash
+$env:CACHE_BUST = [DateTimeOffset]::Now.ToUnixTimeSeconds(); docker compose up -d --build
+```
+
+Force rebuild when submodule changes are pulled (Bash/Linux):
+
+```bash
+CACHE_BUST=$(date +%s) docker compose up -d --build
+```
+
 ## Additional Notes
 
 This setup is designed primarily for local development and academic demonstration purposes. For production-grade deployments, it is recommended to:
